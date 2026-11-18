@@ -77,7 +77,9 @@ export function encodePktLines(lines: Array<string | Buffer | 'flush' | 'delim'>
 /** Split a sideband payload stream into band-1 data chunks. */
 export function sidebandWrap(data: Buffer, band = 1): Buffer {
   const parts: Buffer[] = [];
-  const CHUNK = 65516;
+  // A pkt-line is at most 65520 bytes in total: 4 for the length, 1 for the
+  // band byte, so a data chunk may be at most 65515 bytes.
+  const CHUNK = 65515;
   for (let at = 0; at < data.length; at += CHUNK) {
     const slice = data.subarray(at, Math.min(data.length, at + CHUNK));
     const framed = Buffer.concat([Buffer.from([band]), slice]);

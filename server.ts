@@ -778,7 +778,7 @@ function planFetch(repo: Repo, wants: string[], haves: string[], shallowIn: stri
   const objects = repo.objects;
   const shallowSet = new Set(shallowIn);
 
-  const expandRoots = (roots: string[], limit: number | null): { commits: Map<string, number>; objects: Set<string> } => {
+  const expandRoots = (roots: string[], limit: number | null, respectShallow: boolean): { commits: Map<string, number>; objects: Set<string> } => {
     const commits = new Map<string, number>();
     const queue: Array<{ oid: string; generation: number }> = [];
     const included = new Set<string>();
@@ -815,7 +815,10 @@ function planFetch(repo: Repo, wants: string[], haves: string[], shallowIn: stri
       };
       addTree(view.tree);
       if (limit !== null && current.generation >= limit) continue;
-      if (shallowSet.has(current.oid)) continue;
+      // A shallow boundary only cuts the side the client already holds:
+      // the wanted side must walk straight through it, or a deepen could
+      // never reach the parent it is asking for.
+      if (respectShallow && shallowSet.has(current.oid)) continue;
       for (const parent of view.parents) pushCommit(parent, current.generation + 1);
     }
     return { commits, objects: included };
@@ -823,8 +826,8 @@ function planFetch(repo: Repo, wants: string[], haves: string[], shallowIn: stri
 
   // Depth limits only the wanted side; what the client already holds is
   // always its full reachable graph, cut at its shallow boundaries.
-  const want = expandRoots(wants, depth);
-  const held = expandRoots(haves, null);
+  const want = expandRoots(wants, depth, false);
+  const held = expandRoots(haves, null, true);
   const toSend = new Set<string>();
   for (const oid of want.objects) if (!held.objects.has(oid)) toSend.add(oid);
   for (const oid of want.commits.keys()) if (!held.objects.has(oid)) toSend.add(oid);
@@ -847,7 +850,7 @@ function planFetch(repo: Repo, wants: string[], haves: string[], shallowIn: stri
     const parents = parseCommit(obj.data).parents;
     if (parents.some((parent) => union.has(parent))) unshallowOut.push(boundary);
   }
-  const fullWant = expandRoots(wants, null);
+  const fullWant = expandRoots(wants, null, false);
   const acks = haves.filter((have) => fullWant.commits.has(have) || fullWant.objects.has(have));
   return { toSend, shallowOut, unshallowOut, acks };
 }
